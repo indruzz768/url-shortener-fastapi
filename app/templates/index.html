@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <section class="bg-white p-4 rounded-xl shadow">
+    <h2 class="text-lg font-semibold mb-2">Create a Short Link</h2>
+    <p class="text-sm text-gray-600 mb-4">Enter a long URL and get a short code like <code>{{ request.url.scheme }}://{{ request.url.hostname }}:{{ request.url.port }}/abc123</code>.</p>
+    <form id="form" class="space-y-3">
+      <div>
+        <label class="block text-sm font-medium">Long URL</label>
+        <input id="url" type="url" required placeholder="https://example.com/some/very/long/path" class="mt-1 w-full border rounded px-3 py-2" />
+      </div>
+      <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Shorten</button>
+    </form>
+    <div id="result" class="mt-4 hidden">
+      <div class="text-sm text-gray-600 mb-1">Short URL:</div>
+      <div class="flex items-center gap-2">
+        <a id="short-link" class="text-blue-600 underline" target="_blank"></a>
+        <button id="copy" class="text-xs border rounded px-2 py-1">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white p-4 rounded-xl shadow">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">Recent Links</h2>
+      <button id="refresh" class="text-sm underline">Refresh</button>
+    </div>
+    <div id="list" class="space-y-2 text-sm"></div>
+  </section>
+</div>
+
+<script>
+async function refreshList() {
+  const res = await fetch('/shorten/');
+  const data = await res.json();
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  if (!Array.isArray(data) || data.length === 0) {
+    list.innerHTML = '<p class="text-gray-500">No links yet.</p>';
+    return;
+  }
+  const origin = window.location.origin;
+  for (const row of data) {
+    const shortUrl = origin + '/' + row.short_code;
+    const el = document.createElement('div');
+    el.className = 'border rounded p-2 flex items-center justify-between gap-2';
+    el.innerHTML = `
+      <div class="min-w-0">
+        <div class="truncate"><a class="text-blue-600 underline" href="${shortUrl}" target="_blank">${shortUrl}</a></div>
+        <div class="text-gray-600 truncate">${row.original_url}</div>
+      </div>
+      <div class="text-xs text-gray-500 whitespace-nowrap">clicks: ${row.clicks}</div>
+    `;
+    list.appendChild(el);
+  }
+}
+
+document.getElementById('refresh').addEventListener('click', refreshList);
+
+document.getElementById('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = document.getElementById('url').value.trim();
+  if (!url) return;
+  const res = await fetch('/shorten/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ original_url: url })
+  });
+  if (!res.ok) {
+    alert('Invalid URL or server error');
+    return;
+  }
+  const data = await res.json();
+  const shortUrl = window.location.origin + '/' + data.short_code;
+  const a = document.getElementById('short-link');
+  a.textContent = shortUrl;
+  a.href = shortUrl;
+  document.getElementById('result').classList.remove('hidden');
+  e.target.reset();
+  refreshList();
+});
+
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = document.getElementById('short-link').href;
+  await navigator.clipboard.writeText(text);
+  const btn = document.getElementById('copy');
+  const prev = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(() => (btn.textContent = prev), 1200);
+});
+
+refreshList();
+</script>
+{% endblock %}
